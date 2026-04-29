@@ -18,9 +18,9 @@ These scripts reproduce the primary tables and specifications from the original 
 After replicating the original results, these scripts apply state-of-the-art methods to address potential biases in staggered adoption designs (e.g., negative weights in TWFE).
 
 3.  **Goodman-Bacon Decomposition**: 
-    * Execute the scripts related to the Goodman-Bacon decomposition (the remaining `.R` files) to visualize the variation contributing to the TWFE estimate and identify potential "forbidden comparisons."
+    * Execute the scripts related to the Goodman-Bacon decomposition (**gb.R`**) to visualize the variation contributing to the TWFE estimate and identify potential "forbidden comparisons."
 4.  **Callaway & Sant’Anna (CS) Estimator**: 
-    * Execute the CS-related scripts (the remaining `.R` files) to obtain group-time average treatment effects ($ATT(g,t)$). This step accounts for heterogeneous treatment effects over time, which the original 2010 specifications may not fully capture.
+    * Execute the CS-related scripts (**cs2021.R`**) to obtain group-time average treatment effects ($ATT(g,t)$). This step accounts for heterogeneous treatment effects over time, which the original 2010 specifications may not fully capture.
 
 ---
 
@@ -28,5 +28,4 @@ After replicating the original results, these scripts apply state-of-the-art met
 * **Language**: R
 * **Key Libraries**: `did` (for Callaway & Sant’Anna), `bacondecomp`, `fixest`, `tidyverse`.
 
-## Data Source
-The analysis utilizes county-level data on employment and earnings, focusing on contiguous county pairs across state borders to control for local economic shocks as per the original methodology.
+
