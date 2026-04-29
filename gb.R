@@ -37,6 +37,12 @@ dat_all <- read_dta("QCEWindustry_minwage_all.dta") |> zap_labels()
 # bacondecomp requires: one observation per unit per period.
 # We use annual average log MW and annual average log employment.
 #
+# FIX 1: Drop 2006 to match cs2021.R. The raw panel ends mid-year
+# (Q1-Q2 only), so its annual average uses 2 quarters vs. 4 for
+# all other years — a systematic measurement shift. Restricting to
+# 1990-2005 (16 full calendar years) keeps the GB panel directly
+# comparable to the CS estimates.
+#
 # TREATMENT DEFINITION — absorbing state required by bacondecomp:
 # Treatment = 1 from the first year a county's state MW ever exceeded
 # the federal floor, and remains 1 permanently thereafter.
@@ -59,6 +65,7 @@ d_annual <- dat_all |>
     minwage    = mean(minwage,         na.rm = TRUE),
     .groups    = "drop"
   ) |>
+  filter(year <= 2005) |>            # FIX 1: drop incomplete 2006
   # Step 1: raw indicator — state MW above federal floor in this year
   mutate(above_federal = as.integer(minwage > federalmin + 0.001)) |>
   # Step 2: absorbing treatment — 1 from first year ever above, forever
@@ -156,49 +163,53 @@ cat(sprintf("  %-35s  %8s  %8.4f  %8.4f\n",
             sum(summary_tbl$contribution)))
 
 # Identify comparison types using actual bacondecomp labels:
-#   "Treated vs Untreated"    = clean (never/not-yet treated as control)
-#   "Later vs Always Treated" = contaminated (already-treated as control)
-#   "Earlier vs Later Treated" / "Later vs Earlier Treated" = timing comparisons
-clean_types <- bacon_out |> filter(type == "Treated vs Untreated")
-contam_types <- bacon_out |> filter(type == "Later vs Always Treated")
-timing_types <- bacon_out |> filter(grepl("Earlier", type) | grepl("Later vs Earlier", type))
+#   "Treated vs Untreated"     = clean (never/not-yet treated as control)
+#   "Earlier vs Later Treated" = clean timing (early adopter is the treated unit)
+#   "Later vs Earlier Treated" = contaminated (early adopter used as control —
+#                                FIX 2: moved from timing to contaminated)
+#   "Later vs Always Treated"  = contaminated (always-treated as control)
+clean_types  <- bacon_out |> filter(type %in% c("Treated vs Untreated",
+                                                  "Earlier vs Later Treated"))
+contam_types <- bacon_out |> filter(type %in% c("Later vs Always Treated",
+                                                  "Later vs Earlier Treated"))
+timing_types <- bacon_out |> filter(FALSE)   # no pure timing residual after reclassification
 
 clean_wt  <- sum(clean_types$weight,  na.rm = TRUE)
 contam_wt <- sum(contam_types$weight, na.rm = TRUE)
-timing_wt <- sum(timing_types$weight, na.rm = TRUE)
 
 cat("\n--- Weight by comparison type ---\n")
-cat(sprintf("  Treated vs Untreated (clean):            %.4f (%.1f%%)\n",
+cat(sprintf("  Clean (vs Untreated + Earlier vs Later):  %.4f (%.1f%%)\n",
             clean_wt,  100 * clean_wt))
-cat(sprintf("  Later vs Always Treated (contaminated):  %.4f (%.1f%%)\n",
+cat(sprintf("  Contaminated (already-treated as ctrl):   %.4f (%.1f%%)\n",
             contam_wt, 100 * contam_wt))
-cat(sprintf("  Timing comparisons (Early/Late):         %.4f (%.1f%%)\n",
-            timing_wt, 100 * timing_wt))
 
 clean_est  <- weighted.mean(clean_types$estimate,  clean_types$weight)
 contam_est <- weighted.mean(contam_types$estimate, contam_types$weight)
 
-cat(sprintf("\n  TWFE estimate (all comparisons):         %.4f\n", twfe_est))
-cat(sprintf("  Clean comparisons only (vs Untreated):  %.4f\n", clean_est))
-cat(sprintf("  Contaminated only (vs Always Treated):  %.4f\n", contam_est))
-cat(sprintf("  Dube et al. Spec 6 (preferred):         -0.0169\n"))
+cat(sprintf("\n  TWFE estimate (all comparisons):              %.4f\n", twfe_est))
+cat(sprintf("  Clean comparisons only:                       %.4f\n", clean_est))
+cat(sprintf("  Contaminated only (already-treated as ctrl):  %.4f\n", contam_est))
+cat(sprintf("  Dube et al. Spec 6 (preferred):               -0.0169\n"))
+cat(sprintf("  CS (2021) overall ATT (with covariates):      -0.0417\n"))
 
 cat("\nInterpretation:\n")
-cat("  The TWFE estimate (-0.025) is a weighted average of all\n")
-cat("  2x2 DiD comparisons. The clean 'Treated vs Untreated'\n")
-cat("  comparisons (64% of weight) yield an estimate of around\n")
-cat(sprintf("  %.3f. But 'Later vs Always Treated' comparisons\n", clean_est))
-cat("  (31% of weight) use already-treated counties as controls\n")
-cat(sprintf("  and yield +%.3f — the opposite sign. This positive\n", contam_est))
-cat("  estimate is the timing analogue of Dube's spatial\n")
-cat("  heterogeneity problem: counties that adopted MW earlier\n")
-cat("  are on different employment trajectories than later\n")
-cat("  adopters, contaminating the comparison.\n")
+cat("  The TWFE estimate is a weighted average of all 2x2 DiD\n")
+cat("  comparisons. Clean comparisons (early-treated vs untreated\n")
+cat("  and earlier vs later treated) yield a negative estimate\n")
+cat(sprintf("  of %.3f, consistent with the CS (2021) overall ATT\n", clean_est))
+cat("  of -0.042. Contaminated comparisons — 'Later vs Always\n")
+cat("  Treated' and 'Later vs Earlier Treated', where an already-\n")
+cat("  treated unit serves as control — yield a positive estimate.\n")
+cat("  This is the timing analogue of Dube's spatial heterogeneity\n")
+cat("  problem: early adopters are on different employment\n")
+cat("  trajectories than later adopters, contaminating the\n")
+cat("  comparison when used as controls.\n")
 cat("\n  Dube et al. fix the spatial dimension via contiguous\n")
 cat("  county pairs (Spec 6: -0.017). GB shows the traditional\n")
-cat("  TWFE is also wrong along the timing dimension. A\n")
-cat("  Callaway-Sant'Anna estimator within the contiguous pair\n")
-cat("  sample would address both problems simultaneously.\n")
+cat("  TWFE is also wrong along the timing dimension. CS (2021)\n")
+cat("  addresses timing but its pre-trend test (p=0) confirms\n")
+cat("  that spatial heterogeneity persists without the contiguous-\n")
+cat("  pair design — both fixes are needed simultaneously.\n")
 
 # ---- Plot: weighted 2x2 estimates ---------------------------
 # Each point is one 2x2 DiD comparison, sized by its weight.
@@ -209,10 +220,10 @@ p <- ggplot(bacon_out, aes(x = weight, y = estimate, colour = type, shape = type
   geom_hline(yintercept = -0.0169,
              linetype = "dotted", colour = "darkred", linewidth = 0.8) +
   annotate("text", x = max(bacon_out$weight) * 0.6,
-           y = twfe_est + 0.015,
+           y = twfe_est + 0.04,
            label = "TWFE (Spec 1)", size = 3.2, colour = "black") +
   annotate("text", x = max(bacon_out$weight) * 0.6,
-           y = -0.0169 - 0.015,
+           y = -0.0169 - 0.035,
            label = "Dube et al. Spec 6", size = 3.2, colour = "darkred") +
   scale_size_continuous(range = c(1, 8), guide = "none") +
   scale_colour_brewer(palette = "Set2") +
@@ -233,7 +244,7 @@ p <- ggplot(bacon_out, aes(x = weight, y = estimate, colour = type, shape = type
   theme(legend.position = "bottom")
 
 ggsave("dube2010_bacon_decomposition.png", p,
-       width = 8, height = 5.5, dpi = 150)
+       width = 9, height = 5.5, dpi = 150)
 
 cat("\nPlot saved to: dube2010_bacon_decomposition.png\n")
 cat("\n=============================================================\n")
