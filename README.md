@@ -10,16 +10,15 @@ To replicate the results of this study, please execute the scripts in the follow
 These scripts reproduce the primary tables and specifications from the original Dube et al. (2010) paper using the traditional fixed effects framework.
 
 1.  **`replicate_dube2010.R`**: This script handles the core data processing and foundational models required for the replication.
-2.  **`replicate_dube2010_tab123.R`**: Run this to generate the specific results corresponding to Tables 1, 2, and 3 of the original study.
 
 ---
 
 ### Phase 2: Modern Extensions
 After replicating the original results, these scripts apply state-of-the-art methods to address potential biases in staggered adoption designs (e.g., negative weights in TWFE).
 
-3.  **Goodman-Bacon Decomposition**: 
+2.  **Goodman-Bacon Decomposition**: 
     * Execute the scripts related to the Goodman-Bacon decomposition (**`gb.R`**) to visualize the variation contributing to the TWFE estimate and identify potential "forbidden comparisons."
-4.  **Callaway & Sant’Anna (CS) Estimator**: 
+3.  **Callaway & Sant’Anna (CS) Estimator**: 
     * Execute the CS-related scripts (**`cs2021.R`**) to obtain group-time average treatment effects ($ATT(g,t)$). This step accounts for heterogeneous treatment effects over time, which the original 2010 specifications may not fully capture.
 
 ---
