@@ -53,7 +53,7 @@ print_desc <- function(df, panel_label, has_pairs = FALSE) {
 
   # -- Industry employment and wages --
   # Note: empACFSRETAIL/AWWACFSRETAIL are only in the county-pair dataset;
-  # they are absent from the all-county dataset. Skip silently if missing.
+  # they are absent from the all-county dataset.
   cat(sprintf("\n%-14s  %12s  %12s  %12s  %12s\n",
               "Industry", "Mean Emp", "SD Emp", "Mean AWW", "SD AWW"))
   cat(strrep("-", 66), "\n")
@@ -87,9 +87,6 @@ print_desc <- function(df, panel_label, has_pairs = FALSE) {
   }
 
   # -- Minimum-wage events per county --
-  # The Stata code uses pre-computed cumulative event counts per county
-  # (steventspercounty / fedeventspercounty), then divides by 2 for the
-  # pairs dataset because each county appears twice.
   divisor <- if (has_pairs) 2 else 1
   if ("event_type" %in% names(d)) {
     fed_ev <- d |> filter(event_type == 1) |>
@@ -122,22 +119,15 @@ print_desc(dat_contig, "County-Pair Sample", has_pairs = TRUE)
 #   Spec 6: Contiguous county pairs, county + pair×period FE
 #
 # Control sets:
-#   c2  AWW: no extra controls  (just lnMW)
+#   c2  AWW: no extra controls
 #   c2  EMP: lnpop
 #   c3  AWW: lnAWW_TOT
 #   c3  EMP: lnpop + lnemp_TOT
 #
 # SE clustering:
 #   Specs 1-4: clustered by state_fips
-#   Specs 5-6: two-way (Cameron-Gelbach-Miller) by state_fips × bordersegment
+#   Specs 5-6: two-way (Cameron-Gelbach-Miller) by state_fips x bordersegment
 # =============================================================
-
-cat("\n")
-cat("=============================================================\n")
-cat("TABLE 2: MINIMUM WAGE EFFECTS ON EARNINGS AND EMPLOYMENT\n")
-cat("=============================================================\n")
-cat("Coefficient on log(minimum wage) | SEs in parentheses\n")
-cat("c2 = population control; c3 = pop + total emp/wage control\n")
 
 # ---- Prepare all-county analysis dataset --------------------
 d_all <- dat_all |>
@@ -220,7 +210,6 @@ print_spec_row("4: All counties, CensDivFE + State Trends",
 
 # ---- Prepare contiguous-county analysis dataset -------------
 # pair_id format: "SSCCC-SSCCC" where SS = state FIPS (2 chars), CCC = county (3 chars)
-# R substr uses (string, start, stop); Stata uses (string, start, length).
 # Stata: substr(pair_id, 7, 2) = chars 7-8.  R: substr(pair_id, 7, 8).
 d_ct <- dat_contig |>
   filter(nonmissing_rest_both == 66) |>
@@ -290,13 +279,6 @@ for (s in 5:6) {
 #   Spec 2: Cross-state metro,   county + period×CBMSA FE, cluster state
 #   Spec 3: Contiguous pairs,    county + pair×period FE,  two-way cluster
 # =============================================================
-
-cat("\n")
-cat("=============================================================\n")
-cat("TABLE 3: PRE-EXISTING TRENDS (LEADS OF LOG MINIMUM WAGE)\n")
-cat("=============================================================\n")
-cat("Dep vars: lnemp_rest_both, lnemp_TOT, lnAWW_rest_both, lnAWW_TOT\n")
-cat("Reported: (a) coeff on F12 alone; (b) lincom F12+F4; (c) coeff on F4 alone\n")
 
 # ---- Generate leads on the full nonmissing panel ------------
 # IMPORTANT: leads must be computed before applying the sampleperiod
@@ -440,7 +422,3 @@ print_t3_block(samp_contig,
                "pair_period",
                ~state_fips + bordersegment)
 
-cat("\n")
-cat("=============================================================\n")
-cat("Replication complete.\n")
-cat("=============================================================\n")

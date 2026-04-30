@@ -12,24 +12,11 @@
 #
 # Treatment definition: absorbing binary indicator equal to 1
 # from the first year a county's state MW ever exceeded the
-# federal floor. This matches the GB script exactly so results
-# are directly comparable.
-#
-# NOTE on treatment absorbing-ness: the actual MW differential
-# is episodic — 21 counties (in DE and NJ) see above_federal
-# drop back to 0 when the federal floor was raised in 1996-98
-# to match the state level. The treat_year variable is still
-# correctly absorbing in the CS sense (first-year of adoption),
-# but CS is estimating "effect of ever having had a state MW
-# above federal starting in year g", not "effect of currently
-# having a MW differential". This differs from Dube's continuous
-# log(MW) approach and should be noted in any write-up.
+# federal floor.
 #
 # Control group choice: not-yet-treated (rather than never-
-# treated) to avoid reintroducing Dube's spatial heterogeneity
-# problem — never-treated counties are disproportionately
-# Southern states that only ever faced the federal floor, which
-# are on systematically different employment trajectories.
+# treated) to avoid reintroducing DLR's spatial heterogeneity
+# problem.
 #
 # References:
 #   Callaway, B. & Sant'Anna, P.H.C. (2021). "Difference-in-
@@ -42,17 +29,14 @@
 
 library(haven)
 library(dplyr)
-library(did)      # install.packages("did") if needed
+library(did)
 library(fastglm)
 library(ggplot2)
 
 # ---- Compatibility patches ----------------------------------
 # did 2.3.0 calls fastglm via the formula API and calls predict()
-# without newdata. fastglm 0.0.4 has no formula S3 method, and its
-# predict() crashes on NULL newdata. Both are fixed below.
+# without newdata
 
-# Patch 1: fastglm.formula — convert formula to matrix and dispatch
-# to the existing matrix API (fastglm.default).
 .fastglm_formula_patch <- function(formula, data = NULL,
                                    family = gaussian(), ...) {
   env        <- environment(formula)
@@ -66,9 +50,7 @@ library(ggplot2)
 registerS3method("fastglm", "formula", .fastglm_formula_patch,
                  envir = asNamespace("fastglm"))
 
-# Patch 2: predict.fastglm — fall back to model$linear.predictors
-# when newdata is NULL (did 2.3.0 calls predict() without newdata to
-# recover fitted propensity scores; fastglm stores them already).
+# Patch 2: predict.fastglm - fallback method
 .predict_fastglm_patch <- function(object, newdata = NULL,
     type = c("link", "response"), se.fit = FALSE,
     dispersion = NULL, ...) {
@@ -93,7 +75,7 @@ registerS3method("predict", "fastglm", .predict_fastglm_patch,
 dat_all <- read_dta("QCEWindustry_minwage_all.dta") |> zap_labels()
 
 # ---- Prepare annual panel -----------------------------------
-# FIX 1: The raw QCEW panel runs 1990Q1-2006Q2 (66 quarters).
+# The raw QCEW panel runs 1990Q1-2006Q2 (66 quarters).
 # The year 2006 contains only Q1-Q2, so its annual average uses
 # 2 quarters vs. 4 for every other year. Including 2006 creates
 # a systematic measurement shift in the last period that would
@@ -114,13 +96,10 @@ d_annual <- dat_all |>
   ) |>
   filter(year <= 2005)   # drop incomplete 2006
 
-# FIX 3: CS (2021) requires covariates to be pre-determined
+# CS (2021) requires covariates to be pre-determined
 # (pre-treatment). lnpop and lnemp_TOT are time-varying, so we
 # pin them to their 1990 baseline values, making them fixed per
 # county and unambiguously pre-treatment for every cohort.
-# (The did package does internally extract pre-treatment covariate
-# values when panel=TRUE, but using a fixed baseline is cleaner
-# and eliminates any ambiguity about which period is used.)
 baseline_covs <- d_annual |>
   filter(year == 1990) |>
   select(countyreal, lnpop_base = lnpop, lnemp_TOT_base = lnemp_TOT)
@@ -136,19 +115,6 @@ d_cs <- d_annual |>
   ) |>
   ungroup() |>
   mutate(
-    # treat_year = 0 for:
-    #   (a) never-treated counties (first_treated_year is NA)
-    #   (b) always-treated counties (first treated in 1990, no pre-period)
-    #   (c) counties first treated in 2006: panel ends in 2005 after the
-    #       fix above, so there is no post-treatment period to estimate
-    #       ATT(g, t) for this cohort.  [FIX 5]
-    #   (d) cohorts g=1993 (1 county) and g=1996 (2 counties): the DR
-    #       estimator fits a propensity-score logit within each (g,t) cell.
-    #       With only 1-2 treated observations the logit degenerates and
-    #       DRDID throws "argument 'y' is missing". The did package itself
-    #       warns about these groups. We drop them from identified cohorts;
-    #       they remain in the data as part of the not-yet-treated control
-    #       pool for other cohorts.
     treat_year = case_when(
       is.na(first_treated_year)              ~ 0,
       first_treated_year == 1990             ~ 0,
@@ -170,12 +136,6 @@ n_no_post <- d_cs |> filter(treat_year == 0, !is.na(first_treated_year),
   distinct(county_id) |> nrow()
 n_treated <- d_cs |> filter(treat_year > 0) |> distinct(county_id) |> nrow()
 
-cat("\n")
-cat("=============================================================\n")
-cat("CALLAWAY & SANT'ANNA (2021)\n")
-cat("Dube, Lester & Reich (2010) — Extension\n")
-cat("=============================================================\n")
-
 cat("\nSample summary:\n")
 cat(sprintf("  Counties (total):                    %d\n", n_distinct(d_cs$county_id)))
 cat(sprintf("  Years:                               %d (%d to %d)\n",
@@ -187,7 +147,7 @@ cat(sprintf("  Identified treated cohorts:          %d counties\n", n_treated))
 cat(sprintf("  Treatment cohorts:                   %s\n",
             paste(sort(unique(d_cs$treat_year[d_cs$treat_year > 0])), collapse = ", ")))
 
-# Warn about thin cohorts  [FIX 6]
+# Warn about thin cohorts
 cat("\nNOTE — thin cohorts:\n")
 thin <- d_cs |> filter(treat_year > 0) |>
   distinct(county_id, treat_year) |>
@@ -201,10 +161,10 @@ if (nrow(thin) > 0) {
 }
 
 # ---- Estimate ATT(g,t) [doubly robust] ----------------------
-# FIX 2: use est_method = "dr" (doubly robust) throughout.
+# Use est_method = "dr" (doubly robust) throughout.
 # "reg" (outcome regression only) was a diagnostic pass only.
 #
-# FIX 7: base_period = "universal" normalises all pre-treatment
+# Fbase_period = "universal" normalises all pre-treatment
 # relative periods to a single common base period rather than
 # the period immediately before treatment (base_period =
 # "varying"). "universal" is more conservative for pre-trend
@@ -219,11 +179,11 @@ cs_out <- att_gt(
   yname                  = "lnemp",
   tname                  = "year",
   idname                 = "county_id",
-  gname                  = "treat_year",   # FIX 8: column holding first treatment year (0 = never/always treated)
+  gname                  = "treat_year",   
   data                   = d_cs,
-  xformla                = ~ lnpop_base + lnemp_TOT_base,   # FIX 3: fixed 1990 baseline covariates
+  xformla                = ~ lnpop_base + lnemp_TOT_base,   
   control_group          = "notyettreated",
-  est_method             = "dr",           # FIX 2: doubly robust (preferred)
+  est_method             = "dr",         
   clustervars            = "state_fips",
   panel                  = TRUE,
   allow_unbalanced_panel = FALSE,
@@ -272,7 +232,6 @@ cat("comparable but directional inference is.\n")
 # ---- Plots --------------------------------------------------
 
 # Event study plot
-# FIX 2: subtitle now correctly reflects est_method = "dr"
 p_es <- ggdid(agg_dyn) +
   geom_hline(yintercept = -0.0169, linetype = "dotted",
              colour = "darkred", linewidth = 0.8) +
@@ -311,7 +270,3 @@ p_grp <- ggdid(agg_grp) +
 ggsave("dube2010_cs2021_cohort.png", p_grp,
        width = 8, height = 5.5, dpi = 150)
 cat("Cohort ATT plot saved to: dube2010_cs2021_cohort.png\n")
-
-cat("\n=============================================================\n")
-cat("Done.\n")
-cat("=============================================================\n")
