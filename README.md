@@ -9,7 +9,7 @@ To replicate the results of this study, please execute the scripts in the follow
 ### Phase 1: Original Replication
 These scripts reproduce the primary tables and specifications from the original Dube et al. (2010) paper using the traditional fixed effects framework.
 
-1.  **`replicate_dube2010.R`**: This script handles the core data processing and foundational models required for the replication.
+1.  **`replicate_dube2010.R`**: This script handles the core data processing and foundational models required for the replication and generates Tables 1, 2, and 3. 
 
 ---
 
