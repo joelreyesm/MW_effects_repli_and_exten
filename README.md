@@ -28,4 +28,13 @@ After replicating the original results, these scripts apply state-of-the-art met
 * **Language**: R
 * **Key Libraries**: `did` (for Callaway & Sant’Anna), `bacondecomp`, `fixest`, `tidyverse`.
 
+## Data
+
+To run the R scripts, you will need the following two datasets:
+
+* `QCEWindustry_minwage_contig.dta`
+* `QCEWindustry_minwage_all.dta`
+
+Both files can be downloaded from the [Harvard Dataverse](https://dataverse.harvard.edu/file.xhtml?persistentId=doi:10.7910/DVN/L4DUZ7/8ODET4&version=2.0).
+
 
