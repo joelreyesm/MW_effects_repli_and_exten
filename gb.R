@@ -10,8 +10,7 @@
 # units, which is invalid under treatment effect heterogeneity.
 #
 # The contiguous county design (Spec 6) fixes the spatial
-# problem. GB diagnoses the timing problem. Together they give
-# a complete picture of why Spec 1 is wrong.
+# problem. GB diagnoses the timing problem. 
 #
 # Reference:
 #   Goodman-Bacon, A. (2021). "Difference-in-differences with
@@ -25,8 +24,8 @@
 library(haven)
 library(dplyr)
 library(fixest)
-library(bacondecomp)  # install.packages("bacondecomp") if needed
-library(ggplot2)      # for the decomposition plot
+library(bacondecomp) 
+library(ggplot2)   
 
 # ---- Load data ----------------------------------------------
 dat_all <- read_dta("QCEWindustry_minwage_all.dta") |> zap_labels()
@@ -37,12 +36,6 @@ dat_all <- read_dta("QCEWindustry_minwage_all.dta") |> zap_labels()
 # bacondecomp requires: one observation per unit per period.
 # We use annual average log MW and annual average log employment.
 #
-# FIX 1: Drop 2006 to match cs2021.R. The raw panel ends mid-year
-# (Q1-Q2 only), so its annual average uses 2 quarters vs. 4 for
-# all other years — a systematic measurement shift. Restricting to
-# 1990-2005 (16 full calendar years) keeps the GB panel directly
-# comparable to the CS estimates.
-#
 # TREATMENT DEFINITION — absorbing state required by bacondecomp:
 # Treatment = 1 from the first year a county's state MW ever exceeded
 # the federal floor, and remains 1 permanently thereafter.
@@ -51,6 +44,7 @@ dat_all <- read_dta("QCEWindustry_minwage_all.dta") |> zap_labels()
 # some states back to parity, causing spurious "un-treatment."
 # The absorbing definition captures the onset of state-level MW policy
 # and is the standard approach in the GB minimum wage literature.
+
 d_annual <- dat_all |>
   filter(nonmissing_rest_both == 66) |>
   group_by(countyreal, year) |>
@@ -65,7 +59,7 @@ d_annual <- dat_all |>
     minwage    = mean(minwage,         na.rm = TRUE),
     .groups    = "drop"
   ) |>
-  filter(year <= 2005) |>            # FIX 1: drop incomplete 2006
+  filter(year <= 2005) |>         
   # Step 1: raw indicator — state MW above federal floor in this year
   mutate(above_federal = as.integer(minwage > federalmin + 0.001)) |>
   # Step 2: absorbing treatment — 1 from first year ever above, forever
@@ -79,12 +73,6 @@ d_annual <- dat_all |>
   ungroup()
 
 # Sanity check: treatment switching
-cat("\n")
-cat("=============================================================\n")
-cat("GOODMAN-BACON DECOMPOSITION\n")
-cat("Dube, Lester & Reich (2010) — Specification 1 Extension\n")
-cat("=============================================================\n")
-
 cat("\nTreatment summary (absorbing: first year state MW > federal MW):\n")
 cat(sprintf("  County-year obs:          %d\n", nrow(d_annual)))
 cat(sprintf("  Treated obs (absorbing):  %d (%.1f%%)\n",
@@ -120,8 +108,7 @@ cat(sprintf("  Counties: %d\n", n_distinct(d_bacon$countyreal)))
 cat(sprintf("  Years:    %d\n", n_distinct(d_bacon$year)))
 cat(sprintf("  Obs:      %d\n", nrow(d_bacon)))
 
-# Run decomposition on employment outcome (no controls —
-# bacon() partials out unit and time FEs internally)
+# Run decomposition on employment outcome 
 bacon_out <- bacon(
   formula  = lnemp ~ treated,
   data     = d_bacon,
@@ -165,14 +152,13 @@ cat(sprintf("  %-35s  %8s  %8.4f  %8.4f\n",
 # Identify comparison types using actual bacondecomp labels:
 #   "Treated vs Untreated"     = clean (never/not-yet treated as control)
 #   "Earlier vs Later Treated" = clean timing (early adopter is the treated unit)
-#   "Later vs Earlier Treated" = contaminated (early adopter used as control —
-#                                FIX 2: moved from timing to contaminated)
+#   "Later vs Earlier Treated" = contaminated (early adopter used as control)
 #   "Later vs Always Treated"  = contaminated (always-treated as control)
 clean_types  <- bacon_out |> filter(type %in% c("Treated vs Untreated",
                                                   "Earlier vs Later Treated"))
 contam_types <- bacon_out |> filter(type %in% c("Later vs Always Treated",
                                                   "Later vs Earlier Treated"))
-timing_types <- bacon_out |> filter(FALSE)   # no pure timing residual after reclassification
+timing_types <- bacon_out |> filter(FALSE)  
 
 clean_wt  <- sum(clean_types$weight,  na.rm = TRUE)
 contam_wt <- sum(contam_types$weight, na.rm = TRUE)
@@ -192,27 +178,7 @@ cat(sprintf("  Contaminated only (already-treated as ctrl):  %.4f\n", contam_est
 cat(sprintf("  Dube et al. Spec 6 (preferred):               -0.0169\n"))
 cat(sprintf("  CS (2021) overall ATT (with covariates):      -0.0417\n"))
 
-cat("\nInterpretation:\n")
-cat("  The TWFE estimate is a weighted average of all 2x2 DiD\n")
-cat("  comparisons. Clean comparisons (early-treated vs untreated\n")
-cat("  and earlier vs later treated) yield a negative estimate\n")
-cat(sprintf("  of %.3f, consistent with the CS (2021) overall ATT\n", clean_est))
-cat("  of -0.042. Contaminated comparisons — 'Later vs Always\n")
-cat("  Treated' and 'Later vs Earlier Treated', where an already-\n")
-cat("  treated unit serves as control — yield a positive estimate.\n")
-cat("  This is the timing analogue of Dube's spatial heterogeneity\n")
-cat("  problem: early adopters are on different employment\n")
-cat("  trajectories than later adopters, contaminating the\n")
-cat("  comparison when used as controls.\n")
-cat("\n  Dube et al. fix the spatial dimension via contiguous\n")
-cat("  county pairs (Spec 6: -0.017). GB shows the traditional\n")
-cat("  TWFE is also wrong along the timing dimension. CS (2021)\n")
-cat("  addresses timing but its pre-trend test (p=0) confirms\n")
-cat("  that spatial heterogeneity persists without the contiguous-\n")
-cat("  pair design — both fixes are needed simultaneously.\n")
-
 # ---- Plot: weighted 2x2 estimates ---------------------------
-# Each point is one 2x2 DiD comparison, sized by its weight.
 p <- ggplot(bacon_out, aes(x = weight, y = estimate, colour = type, shape = type)) +
   geom_point(aes(size = weight), alpha = 0.7) +
   geom_hline(yintercept = twfe_est,
@@ -247,6 +213,3 @@ ggsave("dube2010_bacon_decomposition.png", p,
        width = 9, height = 5.5, dpi = 150)
 
 cat("\nPlot saved to: dube2010_bacon_decomposition.png\n")
-cat("\n=============================================================\n")
-cat("Done.\n")
-cat("=============================================================\n")
